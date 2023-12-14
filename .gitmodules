@@ -1,0 +1,3 @@
+[submodule "cloudFront"]
+	path = cloudFront
+	url = https://github.com/antoineMaurais/cloudFront.git
