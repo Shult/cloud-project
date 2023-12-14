@@ -1,0 +1,41 @@
+# cloud-projet
+OLD-Stack
+IAI3_07*.sh
+*.log
+
+# Node modules
+node_modules/
+
+# Dist/build folders
+dist/
+build/
+
+# And system files that are often not needed
+.DS_Store
+
+
+
+
+# FRONT
+
+# dependencies
+/cloudFront/node_modules
+/cloudFront/.pnp
+/cloudFront.pnp.js
+
+# testing
+/cloudFront/coverage
+
+# production
+/cloudFront/build
+
+# misc
+/cloudFront/.DS_Store
+/cloudFront/.env.local
+/cloudFront/.env.development.local
+/cloudFront/.env.test.local
+/cloudFront/.env.production.local
+
+/cloudFront/npm-debug.log*
+/cloudFront/yarn-debug.log*
+/cloudFront/yarn-error.log*

@@ -1,0 +1,191 @@
+heat_template_version: "2021-04-16"
+
+description: "Cloud projet - IAI3 - MESTRE - MAURAIS - Template for deploying an application with frontend and backend on OpenStack."
+
+parameters:
+  image:
+    type: string
+    description: ID of image to use for servers
+
+  flavor:
+    type: string
+    description: Name of Flavor to use for servers
+
+  external_network:
+    type: string
+    description: ID of external network
+
+  network_name:
+    type: string
+    description: Name of our network
+
+  ip_fixe_back:
+    type: string
+    description: Ip fixe for the backend instance (Subnet)
+
+  ip_fixe_front:
+    type: string
+    description: Ip fixe for the frontend instance (Subnet)
+
+resources:  
+  my_volume:
+    type: OS::Cinder::Volume
+    properties:
+      size: 2
+      name: "Volume-IAI3-MESTRE-MAURAIS"
+
+  my_network:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: network_name }
+      admin_state_up: True
+
+  my_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: my_network }
+      cidr: 192.168.100.0/24
+
+  my_router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info:
+        network: { get_param: external_network }
+
+  my_router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: { get_resource: my_router }
+      subnet: { get_resource: my_subnet }
+
+  frontend_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: tcp
+          port_range_min: 22
+          port_range_max: 22
+          direction: ingress
+        - protocol: tcp
+          port_range_min: 80
+          port_range_max: 80
+          direction: ingress
+        - protocol: tcp
+          port_range_min: 8080
+          port_range_max: 8080
+        - protocol: tcp
+          port_range_min: 443
+          port_range_max: 443
+          direction: ingress
+        - protocol: icmp
+          port_range_min: 1
+          port_range_max: 65535
+          direction: ingress
+
+  backend_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: tcp
+          port_range_min: 1
+          port_range_max: 65535
+          direction: ingress
+        - protocol: icmp
+          port_range_min: 1
+          port_range_max: 65535
+          direction: ingress
+
+  frontend_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_resource: my_network }
+      fixed_ips:
+      - subnet: { get_resource: my_subnet }
+        ip_address: { get_param: ip_fixe_front }
+      security_groups: [{ get_resource: frontend_security_group }]
+    depends_on: [my_network, frontend_security_group]
+
+  backend_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_resource: my_network }
+      fixed_ips:
+      - subnet: { get_resource: my_subnet }
+        ip_address: { get_param: ip_fixe_back }
+      security_groups: [{ get_resource: backend_security_group }]
+    depends_on: [my_network, backend_security_group]
+
+  my_floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: { get_param: external_network }
+
+  associate_floating_ip:
+    type: OS::Neutron::FloatingIPAssociation
+    properties:
+      floatingip_id: { get_resource: my_floating_ip }
+      port_id: { get_resource: frontend_port }
+    depends_on: [my_router_interface, frontend_port, my_floating_ip]
+
+
+
+# HERE
+  frontend_instance:
+    type: OS::Nova::Server
+    properties:
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      networks:
+        - port: { get_resource: frontend_port }
+      user_data_format: RAW
+      user_data: |
+        #!/bin/bash
+        # Créer un nouvel utilisateur 'admin'
+        useradd admin -m -s /bin/bash
+        # Définir un mot de passe pour l'utilisateur 'admin'
+        echo 'admin:admin' | chpasswd
+        # Ajouter l'utilisateur 'admin' au groupe sudo
+        usermod -aG sudo admin
+
+        # Cloner le dépôt Git
+        git clone https://github.com/antoineMaurais/cloudFront.git /tmp/front
+        # Naviguer dans le répertoire du projet
+        cd /tmp/front
+        # Lancer les services avec Docker Compose
+        docker-compose up -d
+      
+# HERE
+  backend_instance:
+    type: OS::Nova::Server
+    properties:
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      networks:
+        - port: { get_resource: backend_port } 
+      block_device_mapping:
+        - device_name: /dev
+          volume_id: { get_resource: my_volume }
+      user_data_format: RAW
+      user_data: |
+        #!/bin/bash
+        # Créer un nouvel utilisateur 'admin'
+        useradd admin -m -s /bin/bash
+        # Définir un mot de passe pour l'utilisateur 'admin'
+        echo 'admin:admin' | chpasswd
+        # Ajouter l'utilisateur 'admin' au groupe sudo
+        usermod -aG sudo admin
+
+        # Cloner le dépôt Git
+        # git clone [URL_DU_REPO_GIT] /tmp/back
+        # Naviguer dans le répertoire du projet
+        # cd /tmp/back
+        # Lancer les services avec Docker Compose
+        # docker-compose up -d
+        cd tmp
+        mkdir back
+
+
+outputs:
+  frontend_ip:
+    description: "The floating IP address of the Frontend server."
+    value: { get_attr: [my_floating_ip, floating_ip_address] }
